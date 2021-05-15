@@ -1,0 +1,23 @@
+{
+    URLparameters = (
+	{
+	    checkedNumber = <*BY>;
+	    param = "";
+	    showCheckedNumber = <*BY>;
+	    value = "";
+	}
+    );
+    authenticationType = None;
+    httpVerb = GET;
+    oauth1Token = "";
+    password = "";
+    requestBody = "";
+    requestBodyFormat = "Form Url Encoded";
+    requestHeaders = "<![CDATA[X-Api-Token:8870b110a4fbf0f3d780e344f474ad2d275369c8 
+]]>";
+    requests = "";
+    testResults = "";
+    testScript = "";
+    url = "https://";
+    userName = "";
+}

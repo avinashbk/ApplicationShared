@@ -1,0 +1,63 @@
+﻿(** PUBLIC **)
+
+(**
+	Handler:
+		ORNAppNavigation.openPatientSearch
+	Description: 
+		 Select and open patient search menu
+	Parameters:  
+		n/a
+	Returns: 
+		n/a
+**)
+to openPatientSearch
+	If SutInfo().device_type starts with "iPad"
+		click (text:"Patient", SearchRectangle: ORNScreen.scale(0, .9, .5, 1), waitFor: ORNInterval.medium)
+		wait 2 // This screen slides in. Time for it to completely slide in and settle
+	Else if SutInfo().device_type starts with "iPhone X"	
+		click (image: "ORNAppNavigation/Icon_PatientSearchMenu", SearchRectangle:ORNScreen.scale(0, .9, 1, 1), waitFor: ORNInterval.medium)
+		wait 2 // This screen slides in. Time for it to completely slide in and settle
+	Else if SutInfo().device_type starts with "iPhone"
+		click (text:"Search", SearchRectangle:ORNScreen.scale(0, .9, 1, 1), waitFor: ORNInterval.medium)
+		wait 2 // This screen slides in. Time for it to completely slide in and settle
+	Else if SutInfo().device_os start with "Android"  
+	End if
+end openPatientSearch
+
+(**
+	Handler:
+		ORNAppNavigation.openPatientListFromChart
+	Description: 
+		 Open patient list from open patient chart
+	Parameters:  
+		n/a
+	Returns: 
+		n/a
+**)
+to openPatientListFromChart
+	If ImageFound (ORNInterval.small, image: "MBLNavigation/Button_DismissKeyboard", SearchRectangle: ORNScreen.scale (.7, .8, 1, 1))
+		Click FoundImageLocation()
+	End If
+	ORNAppPatientMenu.openPatientMenu
+	Click (image: "ORNAppNavigation/Icon_PatientListMenu", SearchRectangle: ORNScreen.bottomHalf)
+	wait 2 // This screen slides in. Time for it to completely slide in and settle
+end openPatientListFromChart
+
+(**
+	Handler:
+		ORNAppNavigation.openScheduleFromChart
+	Description: 
+		Open schedule from open patient chart
+	Parameters:  
+		n/a
+	Returns: 
+		n/a
+**)
+to openScheduleFromChart
+	If ImageFound(3, image:"ORNAppNavigation/Button_DismissKeyboard") then
+		Click FoundImageLocation()
+	End If
+	ORNAppPatientMenu.openPatientMenu
+	Click (image: "ORNAppNavigation/Icon_ScheduleMenu", SearchRectangle: ORNScreen.bottomHalf)
+	wait 2 // This screen slides in. Time for it to completely slide in and settle
+end openScheduleFromChart

@@ -1,0 +1,104 @@
+﻿(** PUBLIC **)
+
+(**
+	Handler:
+		ORNAppSettingsMenu.openUserMenu
+	Description: 
+		Open user/settings menu from patient menu
+	Parameters:  
+		n/a
+	Returns: 
+		n/a
+**)
+to openUserMenu
+	if SutInfo().device_type starts with "iPad"
+		ORNAppSettingsMenu.openSettingsMenuiPad
+	else if SutInfo().device_type starts with "iPhone"
+		ORNAppSettingsMenu.openSettingsMenuiPhone
+		//else if SutInfo().device_os start with "Android"  
+	end if
+end openUserMenu
+
+(**
+	Handler:
+		ORNAppSettingsMenu.selectLogout
+	Description: 
+		Select Log Out option from the settings menu
+	Parameters:  
+		n/a
+	Returns: 
+		n/a
+**)
+to selectLogout
+	if SutInfo().device_type starts with "iPad"
+		set searchArea to ORNSCreen.scale (0, .75, .5, 1)
+	else if SutInfo().device_type starts with "iPhone"
+		set searchArea to ORNSCreen.scale (.2, .25, .8, .75)
+		//else if SutInfo().device_os start with "Android"  
+	end if	
+	Click (Text:"Log Out", SearchRectangle:searchArea, waitFor: ORNInterval.medium)	
+end selectLogout
+
+(**
+	Handler:
+		ORNAppSettingsMenu.selectSecurity
+	Description: 
+		Select Security option from the settings menu
+	Parameters:  
+		n/a
+	Returns: 
+		n/a
+**)
+to selectSecurity
+	if SutInfo().device_type starts with "iPad"
+		set searchArea to ORNSCreen.scale (0, .5, .5, 1)
+	else if SutInfo().device_type starts with "iPhone"
+		set searchArea to ORNSCreen.scale (.2, .2, .8, .5)
+		//else if SutInfo().device_os start with "Android"  
+	end if
+	Click (Text:"Security", SearchRectangle:searchArea, waitFor: ORNInterval.medium)	
+	wait 2 // This screen slides in. Time for it to completely slide in and settle
+end selectSecurity
+
+(** PRIVATE **)
+
+(**
+	Handler:
+		ORNAppUserMenu.openUserMenuiPad
+	Description: 
+		Open the user menu on iPad from the patient menu
+		Because username can be formatted a bunch of way having to hard code coodinate
+	Parameters:  
+		n/a
+	Returns: 
+		n/a
+**)
+to openSettingsMenuiPad
+	Log "Checking if Settings Menu is open"
+	if not ImageFound(text:"Log Out",SearchRectangle: ORNScreen.scale (0, .8, .5, 1)) // checking if already open
+		Log "Opening Settings Menu"
+		if ImageFound(text:"Patient",SearchRectangle: ORNScreen.scale (0, .8, .5, 1))
+			tap (30, FoundImageLocation().y) // tapping 30 pixels in from left on same y coordinate as patient search selection
+			wait 2 // This screen slides in. Time for it to completely slide in and settle
+		end if
+	end if
+end openSettingsMenuiPad
+
+(**
+	Handler:
+		ORNAppUserMenu.openUserMenuiPhone
+	Description: 
+		Open the user menu on iPad from the patient menu
+	Parameters:  
+		n/a
+	Returns: 
+		n/a
+**)
+to openSettingsMenuiPhone
+	Log "Checking if Settings Menu is open"
+	if not ImageFound(text:"Log Out",SearchRectangle: ORNScreen.scale (.2, .2, .8, .8)) // checking if already open
+		Log "Opening Settings Menu"
+		click (text:"Settings", SearchRectangle: ORNScreen.scale (0, .9, 1, 1), waitFor: ORNInterval.medium)
+		wait 2 // This screen slides in. Time for it to completely slide in and settle
+	end if	
+end openSettingsMenuiPhone

@@ -1,0 +1,448 @@
+﻿(** PUBLIC **)
+
+(*
+	Handler:
+		ORNAppManagement.setupAndLaunchApplication (environment)
+	Description: 
+		Install and launch latest version of app defined.
+		Additionally: Sets the device orientation to Portrait and press home button on device to awake device as needed.
+	Parameters:
+		environment - ResourceFile, test Environment file.
+	Returns: 
+		n/a
+*)
+to setupAndLaunchApplication environment
+	if environment.app.name is empty
+		throw (Name: "ORNAppManagement.setupAndLaunchApplication exception", reason: "Unable to installApp, app.name is blank. Check your environment file.")
+	end if		
+	if SutInfo().device_type start with "iP"  // If iOS uses Safari browser
+		PressHomeButton
+		PressHomeButton
+	else if SutInfo().device_os start with "Android"  // If Android use AppCenterApp	
+		SwipeUp the remoteScreenSize times .9	
+		SwipeUp		
+	end if		
+	Log "Setting device Orientation to Portrait."
+	setDeviceOrientation "Portrait"
+	if SutInfo().device_type start with "iP"  // If iOS uses Safari browser
+		ORNAppManagement.installApp environment.app.name
+		ORNAppManagement.launchApplicationWithRetry environment.app.bundleId, 12
+	else if SutInfo().device_os start with "Android"  // If Android use AppCenter
+		ORNAppManagement.installAndOpenAndroidApp environment.app.name
+	else 
+		throw (Name: "ORNAppManagement.setupAndLaunchApplication exception", reason: "Unable to determine type of device")
+	end if
+end setupAndLaunchApplication
+
+(** PRIVATE **)
+
+(*
+	Handler:
+		ORNAppManagement.installApp (appName)
+	Description: 
+		Get download URL for latest version of App name provided
+		Open browser on device to enter URL and install the application
+	Parameters:
+		 appName - The Application name to install using AppCenter
+	Returns: 
+		n/a
+*)
+to installApp appName
+	// Retrieve token value which is stored in the password field within the Cerner Vault safe
+	set token to ORNCredential.retrieveCredential("632330").password // 632330 is Credential ID for the defined app center user. (update in future)
+	set credential to ORNCredential.retrieveEncodedCredential ("612969") // 612969 is Credential ID for the defined app center user. (update this in future)	
+	log "Attempting to create download URL with appname and token of app from App center API using Application name:" && appName
+	set downloadURL to ORNAppManagement.getAppDownloadURL(appName, token)	
+	log "Attempting to get the download URL from App Center API using app display name" && downloadURL
+	MBLNativeDeviceUtilities.enterURLIntoBrowser downloadURL // Open browser, enter URL		
+	Log "Logging into AppCenter app with credentials "
+	
+	// Add logic to click Cancel if asked to submit this form again
+	ORNAppManagement.loginToAppCenter credential
+	ORNAppManagement.installApplication // Installs application
+end installApp
+
+(*
+	Handler:
+		 ORNAppManagement.getAppDownloadURL (appName, token)
+	Description: 
+		Retrieve Public ID of app in AppCenter using API call
+	Parameters:
+		appName - Name of application you need public ID.
+		token - token value of user for AppCenter application
+	Returns: 
+		publicID -  down load URL.
+*)
+to getAppDownloadURL appName, token
+	set downloadURL to empty
+	set url to "https://api.appcenter.ms/v0.1/tester/apps"	
+	set requestHeaders to (<<X-API-Token>>: token)	
+	set httpmethod to "GET"
+	set appCenterData to JSONValue(GenericAPI(url: url, httpmethod: httpmethod, requestHeaders: requestHeaders).responseBody)
+	
+	//Repeat through all apps until you get a match on appName
+	repeat with each item app of appCenterData
+		if app.display_name = appName
+			set downloadURL to  "https://install.appcenter.ms/orgs/" & app.owner.name & "/apps/" & app.name
+			exit  repeat
+		end if
+	end repeat
+	
+	//If app is not found
+	if downloadURL is empty
+		Throw Name: "ORNAppManagement.getAppDownloadURL exception", reason: "Unable to retrieve app name from AppCenter.  Please Check appName."
+	end if
+	return downloadURL	
+end getAppDownloadURL
+
+(*
+	Handler:
+		 ORNAppManagement.loginToAppCenter credential
+	Description: 
+		Enter email and password into appcenter and sign in. Login required for iOS devices only.
+	Parameters: 
+		credential -- username and password needed to login into AppCenterapp
+	Returns: 
+		n/a
+*)
+to loginToAppCenter credential
+	set msgSearchArea to ORNAppManagement.setMsgSearchArea() 
+	set credentialSearchArea to ORNAppManagement.setCredentialSearchArea() 	
+	
+	// Logging in with credentials.
+	WaitFor 30 seconds, text: "Sign In"
+	ORNAppManagement.signInWithEmail
+	if credential.username is empty
+		throw Name: "ORNAppManagement.loginToAppCenter exception", reason: "No User ID . Check credential ID"
+	end if
+	log "Logging into appcenter  with user:" && credential.username
+	typetext credential.username
+	click image:"ORNAppCenter/textbox_Password", SearchRectangle: credentialSearchArea
+	ORNCredential.typeEncodedPassword credential.password
+	wait 2 // let screen settle from scrolling when entering password
+	click image: "ORNAppCenter/Button_SignIn"
+	
+	// Logic to bypass device account registration.  Current bug on some device even if profile installed
+	if imageFound (text: "I'm good", waitFor: 30 seconds, SearchRectangle: ORNScreen.scale(.1, .2, .9, .8))
+		click FoundImageLocation()
+		Waitfor 5 seconds, text:"You might", SearchRectangle: ORNScreen.scale(.1, .2, 1, .8)
+		click text: "OK"
+	end if
+end loginToAppCenter	
+
+(**
+	Handler:
+		ORNAppManagement.signInWithEmail
+	Description: 
+		 Finds text  Sign in with email and clicks on it.
+	Parameters: 
+		n/a
+	Returns: 
+		n/a
+**)
+to signInWithEmail 
+	log "Attempting to sign in to the app center with email"
+	if SutInfo().device_type start with "iP"
+		repeat until signInFound is true
+			if ImageFound(image:"ORNAppCenter/Link_SignInWithEmail", waitFor: 5) or if ImageFound(text:"Sign in with email", waitFor: 1)
+				click FoundImageLocation()
+				set signInFound to true
+			else if repeatindex() is greater than 2
+				throw "Sign in with email not found when scrolling"	
+			else
+				log "Swiping UP to find sign in with email text"
+				SwipeUp
+				wait 2 //waiting for screen to settle
+			end if
+		end repeat
+	else
+		LogWarning  "Device Type not supported in handler ORNAppManagement.signInWithEmail"
+	end if
+end signInWithEmail
+
+(*
+	Handler:
+		 ORNAppManagement.installAndOpenAndroidApp (androidAppName)
+	Description: 
+		Android app downloading using AppCenter app.
+	Parameters: 
+		App name to to download Ex: Instanote Android Staging
+	Returns: 
+		n/a
+*)
+to installAndOpenAndroidApp androidAppName
+	ORNAppManagement.launchAndroidAppCenterApp
+	ORNAppManagement.downloadAndroidApp androidAppName
+	ORNAppManagement.installAndroidApp
+end installAndOpenAndroidApp
+
+(*
+	Handler:
+		 ORNAppManagement.getAppCenterAppLaunchID
+	Description: 
+		returns the bundle ID that is used to launch the AppCenterApp 
+	Parameters: 
+		n/a
+	Returns: 
+		AppCenterAppID - bundle id used to launch app
+*)
+to getAppCenterAppLaunchID
+	return "com.microsoft.hockeyapp.testerapp" // "de.codenauts.hockeyapp"
+end getAppCenterAppLaunchID
+
+(*
+	Handler:
+		 ORNAppManagement.launchAndroidAppCenterApp
+	Description: 
+		This handler is to Kill and Launch AppCenter App
+	Parameters: 
+		n/a
+	Returns: 
+		n/a
+*)
+to launchAndroidAppCenterApp
+	log "Launching AppCenter App" 
+	set AppCenterapp to ORNAppManagement.getAppCenterAppLaunchID
+	KillApp AppCenterapp
+	Launchapp AppCenterapp
+	setDeviceOrientation "Portrait" // at times the AppCenterapp changes the orientation	
+	If imageFound (image: "ORNAppCenterApp/Button_SignIn/Android")
+		click FoundImageLocation()
+	End If
+end launchAndroidAppCenterApp
+
+(*
+	Handler: 
+		 ORNAppManagement.installAndoidApp
+	Description: 
+		This handler is to click on downlad button, install button and allow app download on device. 
+	Parameters: 
+		n/a
+	Returns: 
+		n/a
+*)
+to installAndroidApp
+	// Select download option
+	WaitFor ORNInterval.small,  (text:"Download", DPI: 200), (image: "ORNAppCenterApp/Button_DownloadApp/Android"),
+	click FoundImageLocation()
+	
+	// Select Install option.
+	WaitFor ORNInterval.medium, (text:"Install", DPI: 200, SearchRectangle: ORNScreen.bottomHalf)
+	WaitFor ORNInterval.medium, (image: "ORNAppCenter/Button_Install/Android", DPI: 200, SearchRectangle: ORNScreen.bottomHalf)
+	click FoundImageLocation()
+	
+	// Confirm Install is complete and open application
+	WaitFor ORNInterval.medium, (imageName:"ORNAppCenterApp/Logo_AppInstalled/Android"), (text: "App installed", DPI: 200)
+	WaitFor ORNInterval.small, (text:"Open", SearchRectangle: ORNScreen.bottomHalf), (image: "ORNAppCenter/Button_Open/Android")
+	click FoundImageLocation()	
+	Log " Application has been installed"
+end installAndroidApp
+
+(*
+	Handler:
+		 ORNAppManagement.downloadAndroidApp (androidAppName)
+	Description: 
+		This handler is to find Android app by scrolling down as necessary
+	Parameters:
+		androidAppName - App name to to download Ex: Instanote Android Staging
+	Returns: 
+		n/a
+*)
+to downloadAndroidApp androidAppName	
+	set app = first word of androidAppName	
+	set domain = last word of androidAppName
+	log "Searching for application" && androidAppName
+	WaitFor ORNInterval.short, text:"All App", DPI: 200, SearchRectangle: ORNScreen.topHalf
+	
+	repeat 15 times
+		put ReadText (ORNScreen.fullScreen) into textOnScreen
+		
+		repeat with each line of textOnScreen by reference 
+			if it contains app and if it ends with domain 
+				click text: it	
+				set appFound to true // used to exit initial pr
+				Log androidAppName && "located and selected"
+				exit repeat
+			end if	
+		end repeat
+		
+		if appFound is not true // if app not found on screen, swipe to next screen 
+			SwipeUp
+		else 
+			exit repeat
+		end if	
+	end repeat	
+end downloadAndroidApp
+
+(*
+	Handler:
+		 ORNAppManagement.installApplication
+	Description: 
+		Select the install option from the download URL and confirm download message with poover.
+	Parameters: 
+		n/a
+	Returns: 
+		n/a
+*)
+to installApplication	
+	set buttonSearchArea to setInstallButtonSearchArea()
+	set popOverArea to setPopOverArea()
+	set downLoadArea to setDownLoadMsgSearchArea()	
+	log "Attempting to select the install button within the appcenter app url"
+	click image: "ORNAppCenter/Button_Install", waitFor: ORNInterval.medium, SearchRectangle: buttonSearchArea
+	
+	// Click install on confirmation pop over
+	if imageFound (text: "appcenter", SearchRectangle: popoverArea, Waitfor: ORNInterval.medium) or if imageFound (text: "AppCenterapp", SearchRectangle: popoverArea)
+		click the last item of EveryImageLocation(text:"Install", SearchRectangle: popoverArea, caseSensitive: Y) 
+	else
+		Throw Name: "ORNAppManagement.installApplication exception", reason: "Unable to start install of application"
+	end if
+	
+	// Confirming app download.
+	if ImageFound(text:"Downloading", waitFor:10,SearchRectangle: downLoadArea)
+		log "Application is downloading"
+	else
+		Throw Name: "ORNAppManagement.installApplication exception", reason: "Application download has failed"
+	end if
+end installApplication
+
+(*
+	Handler:
+		ORNAppManagement.launchApplicationWithRetry (bundleId, retryCount)
+	Description: 
+		Attempt to launch an application until the retryCount is reached.
+		Application may be installing in background (typically under 60 seconds) from AppCenterApp.
+	Parameters:
+		bundleID - bundle ID of application to launch.
+		retryCount - number of times to retry launching application
+	Returns: 
+		n/a
+*)
+to launchApplicationWithRetry bundleId, retryCount
+	set launchAttempt to 0
+	set searchArea to ORNScreen.scale (.1, .1, .9, .7)
+	
+	// App text is located at the top of AppCenter App URL and is hidden when app launches.
+	Set the scriptlogging to Off
+	repeat while ImageFound(text: "Downloading", SearchRectangle: searchArea) 
+		add 1 to launchAttempt
+		if launchAttempt is greater than retryCount
+			throw (reason: "Unable to launch" && bundleId )
+		end if
+		Log "Attempting to launch:" && bundleId && "(" & launchAttempt & ")"
+		LaunchApp bundleId
+		wait ORNInterval.small
+	end repeat
+	Set the scriptlogging to On
+end launchApplicationWithRetry
+
+(*
+	Handler:
+		 ORNAppManagement.setDownLoadMsgSearchArea
+	Description: 
+		 Sets a search area for the not signed in message
+	Parameters: 
+		n/a
+	Returns: 
+		msgSearchArea -  list, Coordinates used for search area rectangle
+*)
+to setDownLoadMsgSearchArea
+	Log "Setting Not Signed In message search area"
+	if SutInfo().device_type starts with "iPa"
+		return ORNScreen.scale (.2, .1, .75, .6)
+	else if SutInfo().device_type starts with "iPh"
+		return ORNScreen.scale(.2, .1, .75, .6)		
+	else if SutInfo().device_type starts with "An"
+		LogWarning "Android credentials search area not configured"
+	end if
+	return ORNScreen.fullScreen
+end setDownLoadMsgSearchArea
+
+(*
+	Handler:
+		 ORNAppManagement.setMsgSearchArea
+	Description: 
+		 Sets a search area for the not signed in message
+	Parameters: 
+		n/a
+	Returns: 
+		msgSearchArea -  list, Coordinates used for search area rectangle
+*)
+to setMsgSearchArea
+	Log "Setting Not Signed In message search area"
+	if SutInfo().device_type starts with "iPa"
+		return ORNScreen.scale (0, 0, 1, .4)
+	else if SutInfo().device_type starts with "iPh"
+		return ORNScreen.scale(0, 0, 1, .3)	
+	else if SutInfo().device_type starts with "An"
+		LogWarning "Android credentials search area not configured"
+	end if
+	return ORNScreen.fullScreen
+end setMsgSearchArea
+
+(*
+	Handler:
+		 ORNAppManagement.setCredentialSearchArea
+	Description: 
+		Sets a search area for the email, password and sign in search area.
+	Parameters: 
+		n/a
+	Returns:
+		credentialSearchArea -  list, Coordinates used for search area rectangle
+*)
+to setCredentialSearchArea
+	Log "Setting Credential search area"
+	if SutInfo().device_type starts with "iPa"
+		return ORNScreen.scale(.2, .15, .75, .7)  //Large but needed for iPad Pro
+	else if SutInfo().device_type starts with "iPh"
+		return ORNScreen.scale(0, .15, .75, .75)	
+	else if SutInfo().device_type starts with "An"
+		LogWarning "Android credentials search area not configured"
+	end if
+	return ORNScreen.fullScreen
+end setCredentialSearchArea
+
+(*
+	Handler:
+		 ORNAppManagement.setInstallButtonSearchArea
+	Description: 
+		Sets a search area for the install button one selected App.
+	Parameters: 
+		n/a
+	Returns: 
+		buttonSearchArea -  list, Coordinates used for search area rectangle
+*)
+to setInstallButtonSearchArea
+	Log "Setting Install button search area"
+	if SutInfo().device_type starts with "iPa"
+		return ORNScreen.scale(.7, .1, 1, .6)
+	else if SutInfo().device_type starts with "iPh"
+		return ORNScreen.scale(.7,.15,1,.6)
+	else if SutInfo().device_type starts with "An"
+		LogWarning "Android credentials search area not configured"
+	end if
+	return ORNScreen.fullScreen
+end setInstallButtonSearchArea
+
+(*
+	Handler:
+		 ORNAppManagement.setPopOverArea
+	Description: 
+		Sets a search area for the install or cancel install popover box.
+	Parameters: 
+		n/a
+	Returns: 
+		popOverArea -  list, Coordinates used for search area rectangle
+*)
+to setPopOverArea
+	Log "Setting Install Popover search area"
+	if SutInfo().device_type starts with "iPa"
+		return ORNScreen.scale(.2, .3, .8, .7)
+	else if SutInfo().device_type starts with "iPh"
+		return ORNScreen.scale(.08, .3, .92, .7)
+	else if SutInfo().device_type starts with "An"
+		LogWarning "Android credentials search area not configured"
+	end if
+	return ORNScreen.fullScreen
+end setPopOverArea
+

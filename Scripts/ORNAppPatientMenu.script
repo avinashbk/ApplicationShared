@@ -1,0 +1,101 @@
+﻿(** PUBLIC **)
+
+(**
+	Handler:
+		ORNAppPatientMenu.openPatientMenu
+	Description: 
+		Attempt to open patient menu if not already open
+	Parameters:  
+		n/a
+	Returns: 
+		n/a
+**)
+to openPatientMenu
+	if ORNAppPatientMenu.onPatientMenu is false
+		if SutInfo().device_type starts with "iPad"
+			ORNAppPatientMenu.openPatientMenuSlidePanel
+		else if SutInfo().device_type starts with "iPhone"
+			ORNAppPatientMenu.openPatientMenuUsingGripper
+			//else if Android
+		end if
+	end if	
+end openPatientMenu
+
+(** PRIVATE **)
+
+(**
+	Handler:
+		ORNAppPatientMenu.openPatientMenuSlidePanel
+	Description: 
+		Open patient menu using the slide panel (iPad)
+	Parameters:  
+		n/a
+	Returns: 
+		n/a
+**)
+to openPatientMenuSlidePanel	
+	if imageFound (image: "ORNAppNavigation/Button_SlidePanelMenu", SearchRectangle: ORNScreen.scale (0, .9, .25, 1), waitFor: ORNInterval.short)
+		Click FoundImageLocation()
+		wait 2 // This screen slides in. Time for it to completely slide in and settle
+	end if
+	if ORNAppPatientMenu.onPatientMenu equals true		
+		log "Patient Menu loaded"
+	else
+		throw exception,  "Unable to open patient Menu slide panel"	
+	end if
+end openPatientMenuSlidePanel	
+
+(**
+	Handler:
+		ORNAppPatientMenu.openPatientMenuUsingGripper
+	Description: 
+		Open patient menu using the slide panelpull down gripper (iPhone)
+	Parameters:  
+		n/a
+	Returns: 
+		n/a
+**)
+to openPatientMenuUsingGripper
+	if imageFound (image:"ORNAppNavigation/Button_GripperNavBar", SearchRectangle: ORNScreen.scale (.25, .05, .75, .3), waitFor: ORNInterval.short)
+		Click FoundImageLocation()
+		wait 2 // This screen slides in. Time for it to completely slide in and settle
+	end if
+	if ORNAppPatientMenu.onPatientMenu equals true
+		log "Patient Menu loaded"
+	else
+		throw exception,  "Unable to open patient Menu using gripper"
+	end if
+end openPatientMenuUsingGripper
+
+(**
+	Handler:
+		ORNAppPatientMenu.onPatientMenu
+	Description: 
+		Performs check to see if patient menu is open
+	Parameters:  
+		n/a
+	Returns: 
+		boolean - if patient menu is open
+**) 
+to onPatientMenu
+	if SutInfo().device_type starts with "iPad"
+		if ImageFound(text:"Patient", SearchRectangle: ORNScreen.scale (0, .92, .5, 1), waitFor: ORNInterval.short)	
+			return true
+		else 
+			return false
+		end if
+	else if SutInfo().device_type starts with "iPhone X"	
+		if imageFound(image:"OrnAppNavigation/Icon_PatientSearchMenu", waitFor: ORNInterval.short)	
+			return true
+		else 
+			return false
+		end if
+	else if SutInfo().device_type starts with "iPhone"
+		if imageFound(text:"Search",SearchRectangle: ORNScreen.scale (0, .9, 1, 1), waitFor: ORNInterval.short)
+			return true
+		else 
+			return false
+		end if
+		//else if SutInfo().device_os start with "Android"  
+	end if
+end onPatientMenu

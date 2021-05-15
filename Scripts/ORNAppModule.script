@@ -1,0 +1,23 @@
+﻿(**
+	Handler:
+		ORNAppModule.changeToModule (moduleName)
+	Description: 
+		 Navigate from one module to another (works for iPad or iPhone)
+	Parameters: 
+		moduleName - text of tab to select (Orders, Documentation)
+	Returns: 
+		n/a
+**)
+to changeToModule moduleName
+	If ImageFound (ORNInterval.small, image: "MBLNavigation/Button_DismissKeyboard", SearchRectangle: ORNScreen.scale (.7, .8, 1, 1))
+		Click FoundImageLocation()
+	End If
+	
+	If SutInfo().device_type contains iPad then
+		Click the last item of EveryImageLocation (text: moduleName, SearchRectangle: ORNScreen.scale (0, .8, 1, 1))
+	Else // assuming iPhone and will need updated in future
+		Click (image: "ORNAppNavigation/Button_GripperNavBar", SearchRectangle: ORNScreen.scale (.2, 0, .8, .25))
+		wait 2 // This screen slides in. Time for it to completely slide in and settle
+		Click (text: moduleName, Waitfor: ORNInterval.small)
+	End If
+end changeToModule

@@ -1,0 +1,259 @@
+﻿(** PUBLIC**)
+
+(**
+	Handler:
+		ORNAppBadgeProvision.selectDomainBadge (domain, identifier) 
+	Description: 
+		From the badge screen looks for a shared/identifier badge paried with correct domain.
+		Selects the first badge that matches based on parameters.
+	Parameters:
+		domain - domain you want to select a badge for
+   		identifier - name or unique part of name used for selecting a personal badge.  Leave empty if only want shared badge
+	Returns: 
+		n/a
+**)
+to selectDomainBadge domain, identifier  
+	log "Attempting to select a badge for domain:" && domain
+	if ORNAppBadgeProvision.onBadgeScreenMobile is false // Checks if on badge screen.  If not, will try and navigate back one attempt
+		log "Not on the badge screen.  Attempting to navigate to badge screen"
+		ORNAppCredential.onLoginScreenReturnToBadgeMobile
+		if ORNAppBadgeProvision.onBadgeScreenMobile is false  //if it tried to return from login screen and failure 
+			throw exception,  "Unable to return to badge screen"
+		end if
+	end if
+	ORNAppBadgeProvision.selectDeviceBadge domain, identifier 
+end selectDomainBadge
+
+(** PRIVATE **)
+
+(**
+	Handler:
+		ORNAppBadgeProvision.onBadgeScreenMobile
+	Description: 
+		Determine if on badge Screen
+	Parameters: 
+		n/a
+	Returns: 
+		boolean - true if on badge screen, else false
+**)
+to onBadgeScreenMobile
+	set searchArea to ORNAppBadgeProvision.deviceBadgeMenuSearchArea
+	log "Checking if currenlty on the badge screen."
+	if SutInfo().device_type start with "iP"
+		return  ImageFound((text:"Location",ValidCharacters:"*",SearchRectangle: searchArea)) 
+	else if SutInfo().device_os start with "Android"  
+		return ImageFound((text:"Manage Domains",SearchRectangle: searchArea)) 
+	else 
+		throw "ORNAppBadgeProvision.onBadgeScreenMobile",  "Unable to determine mobile device type to select a badge"	
+	end if
+end onBadgeScreenMobile
+
+(**
+	Handler:
+		 ORNAppBadgeProvision.deviceBadgeMenuSearchArea
+	Description: 
+		Create search area based on device and Orientation
+	Parameters: 
+		n/a
+	Returns: 
+		searchArea -  list, Coordinates used for search area rectangle
+**)
+to deviceBadgeMenuSearchArea
+	if SutInfo().device_type start with "iPad"
+		if GetDeviceOrientation() equals Portrait or GetDeviceOrientation() equals PortraitUpsideDown // iPad Portrait
+			return ORNScreen.scale (0, .05, 1, .3) 
+		else if GetDeviceOrientation() equals LandscapeRight or GetDeviceOrientation() equals LandscapeLeft // iPad Landscape
+			return ORNScreen.scale (0, .05, 1, .2) 
+		end if
+	else
+		return ORNScreen.scale (0, 0, 1, .2)   // Top part of screen full screen badge
+	end if
+end deviceBadgeMenuSearchArea
+
+(**
+	Handler:
+		 ORNAppBadgeProvision.selectDeviceBadge (domain, identifier)
+	Description: 
+		 Select personal badge based on mobile device type (iOS or Android).
+	Parameters: 
+		domain - domain you want to select a badge for
+		identifier - name or unique part of name used for selecting a personal badge.  Leave empty if only want shared badge
+	Returns: 
+		n/a
+**)
+to selectDeviceBadge domain, identifier
+	if SutInfo().device_type start with "iP"  // iOS 
+		selectBadgeiOS domain, identifier
+	else if SutInfo().device_os start with "Android" 
+		selectBadgeAndroid domain, identifier
+	else 
+		throw "ORNAppBadgeProvision.selectDeviceBadge",  "Unable to determine mobile device type to select a badge"
+	end if
+end selectDeviceBadge
+
+(**
+	Handler:
+		 ORNAppBadgeProvision.selectBadgeiOS (domain, identifier)
+	Description: 
+		 Select Badge on iOS device.
+	Parameters: 
+		domain - domain you want to select a badge for
+		identifier - name or unique part of name used for selecting a personal badge.  Leave empty if only want shared badge
+	Returns: 
+		n/a
+**)
+to selectBadgeiOS domain, identifier
+	log "Attempting to search for badge on iOS device for domain:" && domain
+	repeat 5 times
+		if ORNAppBadgeProvision.foundCorrectiOSBadge(domain, identifier) is true
+			exit repeat // badge found and selected
+		else if ORNAppBadgeProvision.bottomBadgeiOS is true // will scroll/swipe if false
+			throw Name: "ORNAppBadgeProvision.selectBadgeiOS", Reason: "Bottom of badges and unable to find correct badge to select"
+		else if repeatIndex() equals 5 // if not found after 5 swipes/scrolls exiting repeat to prevent possible endless loop
+			throw Name: "ORNAppBadgeProvision.selectBadgeiOS", Reason: "Unable to find correct badge to select"
+		end if
+	end repeat
+end selectBadgeiOS
+
+(**
+	Handler:
+		 ORNAppBadgeProvision.foundCorrectiOSBadge (domain, identifier)
+	Description: 
+		 Checks that badgeIndentifier is for correct domaiin and select if true for iOS device.
+	Parameters: 
+		domain - domain you want to select a badge for
+		identifier - name or unique part of name used for selecting a personal badge.  Leave empty if only want shared badge
+	Returns:
+		boolean value if badge is found
+**)
+to foundCorrectiOSBadge domain, identifier
+	log "Locating all shared badges"
+	put EveryImageLocation(Text:"shared", dpi:200, ValidCharacters:"*") into idLocations	 // get location of all shared badges
+	if identifier is not empty
+		log "Locating all badges for for identifier:" && identifier
+		put EveryImageLocation(Text: identifier, dpi:200, ValidCharacters:"*") into idLocations // get location of all identifier badges
+	end if
+	
+	// Selects badge on first pair match with domain
+	repeat for each item in idLocations
+		set searchArea to (0, it.y - ConnectionInfo().ScreenSize.y *.09, ConnectionInfo().ScreenSize.x, it.y)  
+		if ImageFound(text:domain, SearchRectangle:searchArea)
+			log "Selecting badge for" && domain
+			click it
+			return true
+		end if
+	end repeat
+	return badgeFound
+end foundCorrectiOSBadge
+
+(**
+	Handler:
+		 ORNAppBadgeProvision.bottomBadgeiOS (badgeFound)
+	Description: 
+		 Looks for bottom of the badge screen on iOS deivice.
+	Parameters: 
+		badgeFound - true or false value if badge has been found
+	Returns: 
+		n/a
+**)
+to bottomBadgeiOS badgeFound
+	log "Checking if at bottom of badge screen on iOS device"
+	set searchArea to ORNAppBadgeProvision.deviceBadgeMenuSearchArea
+	put readText(searchArea) into prevBadgeList
+	log "Swiping UP on the badge screen"
+	SwipeUp 
+	Wait 2 // needed to try and let screen settle from rebound
+	put readText(searchArea) into currentBadgeList
+	
+	// Compare current list to prev list to check if at bottom of dropdown (if they are equal)
+	if prevBadgeList equals currentBadgeList
+		log "Bottom of the badges was reached"
+		return true
+	else 
+		return false
+	End if	
+end bottomBadgeiOS
+
+(**
+	Handler:
+		 ORNAppBadgeProvision.selectBadgeAndroid (domain, identifier)
+	Description: 
+		 Checks that badge indentifier is for correct domaiin and select if true for Android device.
+	Parameters: 
+   	 	domain - domain you want to select a badge for
+    		identifier - name or unique part of name used for selecting a personal badge.  Leave empty if only want shared badge
+	Returns: 
+		n/a
+**)
+to selectBadgeAndroid domain, identifier
+	log "Attempting to search for badge on Android device for domain:" && domain
+	repeat 5 times
+		if ORNAppBadgeProvision.foundCorrectAndroidBadge(domain, identifier) is true
+			exit repeat // badge found and selected
+		else if ORNAppBadgeProvision.bottomBadgeAndroid is true // will scroll/swipe if false
+			throw Name: "ORNAppBadgeProvision.selectBadgeAndroid", Reason: "Bottom of badges and unable to find correct badge to select"
+		else if repeatIndex() equals 5 // if not found after 5 swipes/scrolls exiting repeat to prevent possible endless loop
+			throw Name: "ORNAppBadgeProvision.selectBadgeAndroid", Reason: "Unable to find correct badge to select"
+		end if
+	end repeat
+end selectBadgeAndroid
+
+(**
+	Handler:
+		 ORNAppBadgeProvision.selectBadgeAndroid (domain, identifier)
+	Description: 
+		 Checks that badge indentifier is for correct domaiin and select if true for Android device.
+	Parameters: 
+   	 	domain - domain you want to select a badge for
+    		identifier - name or unique part of name used for selecting a personal badge.  Leave empty if only want shared badge
+	Returns:  
+		badgeFound -  - boolean value if badge is found
+**)
+to foundCorrectAndroidBadge domain, identifier
+	log "Locating all shared badges"
+	put EveryImageLocation(Text:"shared", dpi:200, ValidCharacters:"*") into idLocations // get location of all shared badges
+	if identifier is not empty
+		log "Locating all badges for for identifier:" && identifier
+		insert EveryImageLocation(Text:identifier, dpi:200, ValidCharacters:"*") into idLocations // get location of all identifier badges
+	end if
+	
+	//Selects badge on first match with domain
+	repeat for each item in idLocations
+		set searchArea to (0, it.y - ConnectionInfo().ScreenSize.y *.075, ConnectionInfo().ScreenSize.x, it.y)
+		if ImageFound(text:domain,SearchRectangle:searchArea)
+			click it
+			return true
+		end if
+	end repeat
+	return badgeFound
+end foundCorrectAndroidBadge
+
+(**
+	Handler:
+		 ORNAppBadgeProvision.bottomBadgeAndroid
+	Description: 
+		 For Android devices.  Checks previous screen to current after a swipe to check if equal
+	Parameters: 
+		n/a
+	Returns:  
+		endOfScreen - boolean value if bottom 
+**)
+to bottomBadgeAndroid
+	log "Checking if at bottom of badge screen on Android device"
+	set searchArea to ((0), (ConnectionInfo().ScreenSize.y -  ConnectionInfo().ScreenSize.y *.11) ,ConnectionInfo().ScreenSize.x ,ConnectionInfo().ScreenSize.y)
+	put readText(searchArea) into prevBadgeList
+	repeat 2 times //playing with swipe speed and screensize, neither are swiping up enough on Android
+		log "Swiping UP on the badge screen"
+		SwipeUp 
+		Wait 2 // try and let screen settle from rebound 
+	end repeat
+	put readText(searchArea) into currentBadgeList
+	
+	// Compare current list to prev list to check if at bottom of dropdown (if they are equal)
+	if prevBadgeList equals currentBadgeList
+		log "Bottom of the badges was reached"
+		return true
+	else 
+		return false
+	End if
+end bottomBadgeAndroid
